@@ -44,6 +44,8 @@ tqdm = ">=4.66.0"
 # Typing / runtime compatibility
 typing-extensions = ">=4.9.0"
 
+pytest = ">=9.0.2"
+
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0.0"
 ruff = ">=0.3.0"
