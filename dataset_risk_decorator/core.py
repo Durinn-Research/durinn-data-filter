@@ -237,15 +237,19 @@ class DatasetAnnotator(IDatasetAnnotator):
 # Dataset Processor (ANNOTATE + FILTER)
 # ---------------------------------------------------------------------------
 
-from prompt_toolkit import prompt
-from prompt_toolkit.key_binding import KeyBindings
 import sys
-
+import os
 def select_code_columns(columns: List[str]) -> List[str]:
-    if not sys.stdin.isatty():
+    # HARD disable interactive TUI in notebooks / colab
+    if "ipykernel" in sys.modules or os.environ.get("COLAB_GPU"):
         print("Columns:", columns)
         raw = input("Comma-separated code columns: ")
         return [c.strip() for c in raw.split(",") if c.strip()]
+
+    # Real terminal only
+    from prompt_toolkit import prompt
+    from prompt_toolkit.key_binding import KeyBindings
+
     selected = {c: False for c in columns}
     index = 0
     kb = KeyBindings()
@@ -262,24 +266,20 @@ def select_code_columns(columns: List[str]) -> List[str]:
 
     @kb.add(" ")
     def _(_):
-        col = columns[index]
-        selected[col] = not selected[col]
+        selected[columns[index]] = not selected[columns[index]]
 
     @kb.add("enter")
     def _(event):
         event.app.exit()
 
     def render():
-        lines = []
-        for i, c in enumerate(columns):
-            mark = "[x]" if selected[c] else "[ ]"
-            cursor = "➤" if i == index else " "
-            lines.append(f"{cursor} {mark} {c}")
-        return "\n".join(lines)
+        return "\n".join(
+            f"{'➤' if i == index else ' '} [{'x' if selected[c] else ' '}] {c}"
+            for i, c in enumerate(columns)
+        )
 
     prompt(render, key_bindings=kb)
     return [c for c, v in selected.items() if v]
-
 @dataclass
 class DatasetRiskProcessor(IDatasetProcessor):
     detector: ICodeColumnDetector
