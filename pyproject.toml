@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "durinn-data-filter"
-version = "0.1.4"
+version = "0.1.6"
 description = "Risk-aware dataset decorator for Hugging Face datasets with automatic code detection and security risk labeling"
-authors = ["Durinn <victorstrandmoe@gmail.com>"]
+authors = ["Durinn <victor@durinn.ai>"]
 readme = "README.md"
 license = "Apache-2.0"
 

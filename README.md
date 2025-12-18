@@ -1,9 +1,3 @@
-Yep — content is good, it’s just **out of order for how people read READMEs**. Below is a **reordered version only**. Wording is mostly unchanged, just moved so it flows like a real package README.
-
-You can copy-paste this as a replacement.
-
----
-
 # Dataset Risk Decorator
 
 A lightweight, plug-and-play **risk annotation and filtering utility for Hugging Face datasets**.
