@@ -239,8 +239,13 @@ class DatasetAnnotator(IDatasetAnnotator):
 
 from prompt_toolkit import prompt
 from prompt_toolkit.key_binding import KeyBindings
+import sys
 
 def select_code_columns(columns: List[str]) -> List[str]:
+    if not sys.stdin.isatty():
+        print("Columns:", columns)
+        raw = input("Comma-separated code columns: ")
+        return [c.strip() for c in raw.split(",") if c.strip()]
     selected = {c: False for c in columns}
     index = 0
     kb = KeyBindings()
