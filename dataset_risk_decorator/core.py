@@ -310,3 +310,46 @@ class DatasetRiskDecorator(IDatasetRiskDecorator):
         wrapped_loader.__doc__ = getattr(loader_fn, "__doc__", None)
 
         return wrapped_loader
+
+
+
+
+_DEFAULT_SCORER = None
+
+def _get_default_scorer():
+    global _DEFAULT_SCORER
+    if _DEFAULT_SCORER is None:
+        _DEFAULT_SCORER = DebertaRiskScorer("durinn/data-eval")
+    return _DEFAULT_SCORER
+
+
+def _make_decorator(
+    *,
+    threshold=0.5,
+    filter_mode="none",
+    max_rows=None,
+):
+    return DatasetRiskDecorator(
+        scorer=_get_default_scorer(),
+        threshold=threshold,
+        filter_mode=filter_mode,
+        max_rows=max_rows,
+    )
+
+
+def risk_guard(_fn=None, **kwargs):
+    """
+    Usage:
+      @risk_guard
+      @risk_guard(threshold=0.3, max_rows=1000)
+    """
+
+    def decorator(fn):
+        return _make_decorator(**kwargs)(fn)
+
+    # Case 1: used as @risk_guard
+    if _fn is not None and callable(_fn):
+        return decorator(_fn)
+
+    # Case 2: used as @risk_guard(...)
+    return decorator
