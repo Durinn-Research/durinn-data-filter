@@ -12,7 +12,7 @@ from dataset_risk_decorator.core import (
 )
 
 detector = HeuristicCodeColumnDetector()
-scorer = scorer = DebertaRiskScorer("deberta-devign-risk-model")
+scorer = scorer = DebertaRiskScorer("durinn/data-eval")
 
 # Slightly stricter threshold for preference data
 risk_guard = DatasetRiskDecorator(

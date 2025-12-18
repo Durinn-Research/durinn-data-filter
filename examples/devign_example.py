@@ -13,7 +13,7 @@ from dataset_risk_decorator.core import (
 
 # Instantiate core components
 detector = HeuristicCodeColumnDetector()
-scorer = scorer = DebertaRiskScorer("deberta-devign-risk-model")
+scorer = scorer = DebertaRiskScorer("durinn/data-eval")
 
 # Create decorator with default threshold = 0.5
 risk_guard = DatasetRiskDecorator(

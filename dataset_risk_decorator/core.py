@@ -157,18 +157,19 @@ class HeuristicCodeColumnDetector(ICodeColumnDetector):
 # ---------------------------------------------------------------------------
 
 import torch
-from transformers import AutoModelForSequenceClassification, DebertaV2Tokenizer
+from transformers import AutoModelForSequenceClassification, AutoModelForSequenceClassification, AutoTokenizer
 
 @dataclass
-class DebertaRiskScorer(IDebertaRiskScorer):
-    def __init__(self, model_path: str, device: Optional[str] = None):
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+class DebertaRiskScorer(IRiskScorer):
+    model_path: str = "durinn/data-eval"
+    device: Optional[str] = None
 
-        self.tokenizer = DebertaV2Tokenizer.from_pretrained(
-            "microsoft/deberta-v3-base"
-        )
+    def __post_init__(self):
+        self.device = self.device or ("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+        self.model = AutoModelForSequenceClassification.from_pretrained(self.model_path)
+
         self.model.to(self.device)
         self.model.eval()
 
@@ -186,11 +187,10 @@ class DebertaRiskScorer(IDebertaRiskScorer):
         )
 
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
-
         logits = self.model(**inputs).logits
         probs = torch.softmax(logits, dim=-1)
 
-        return float(probs[0, 1].item())
+        return float(probs[0, 1])
 
 # ---------------------------------------------------------------------------
 # Row Annotator
