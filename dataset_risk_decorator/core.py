@@ -40,10 +40,6 @@ class IRiskScorer(Protocol):
     def score(self, code: str) -> float: ...
 
 
-class IDebertaRiskScorer(IRiskScorer, Protocol):
-    def __init__(self, model_path: str, device: str | None = None) -> None: ...
-    def score(self, code: str) -> float: ...
-
 
 class IDatasetAnnotator(Protocol):
     def annotate_row(self, row: Dict[str, Any]) -> Dict[str, Any]: ...
@@ -88,71 +84,6 @@ class DatasetRiskConfig:
 
 import re
 
-@dataclass
-class HeuristicCodeColumnDetector(ICodeColumnDetector):
-    name_keywords: List[str] = field(default_factory=lambda: [
-        "code", "source", "snippet", "body", "func", "function",
-        "solution", "response", "completion", "implementation",
-        "output", "chosen", "rejected",
-    ])
-
-    code_regexes: List[re.Pattern] = field(default_factory=lambda: [
-        re.compile(r"\b(def|class|import|from)\b"),
-        re.compile(r"\b(function|const|let|var)\b"),
-        re.compile(r";\s*$"),
-        re.compile(r"#include\b"),
-        re.compile(r"\b(public|private|static)\b"),
-        re.compile(r"{\s*$"),
-        re.compile(r"}\s*$"),
-    ])
-
-    sample_size: int = 50
-    min_hits: int = 3
-
-    def detect_columns(self, schema: Dict[str, Any]) -> List[str]:
-        return self._detect_by_name(schema)
-
-    def detect_from_dataset(self, dataset: Dataset) -> List[str]:
-        candidates = [
-            col for col, feat in dataset.features.items()
-            if getattr(feat, "dtype", None) is None
-            or "string" in str(getattr(feat, "dtype", "")).lower()
-        ]
-
-        hit_counter: Dict[str, int] = {c: 0 for c in candidates}
-        sample = dataset.select(range(min(self.sample_size, len(dataset))))
-
-        for row in sample:
-            for col in candidates:
-                val = row.get(col)
-                if not isinstance(val, str):
-                    continue
-                for rx in self.code_regexes:
-                    if rx.search(val):
-                        hit_counter[col] += 1
-
-        detected = [c for c, hits in hit_counter.items() if hits >= self.min_hits]
-
-        if not detected:
-            detected = self._detect_by_name(dict(dataset.features))
-
-        return detected
-
-    def _detect_by_name(self, schema: Dict[str, Any]) -> List[str]:
-        detected: List[str] = []
-
-        for col_name, feature in schema.items():
-            lower_name = col_name.lower()
-            if not any(k in lower_name for k in self.name_keywords):
-                continue
-
-            dtype = getattr(feature, "dtype", None)
-            if dtype is not None and "string" not in str(dtype).lower():
-                continue
-
-            detected.append(col_name)
-
-        return detected
 
 # ---------------------------------------------------------------------------
 # DeBERTa Scorer
@@ -282,7 +213,6 @@ def select_code_columns(columns: List[str]) -> List[str]:
     return [c for c, v in selected.items() if v]
 @dataclass
 class DatasetRiskProcessor(IDatasetProcessor):
-    detector: ICodeColumnDetector
     scorer: IRiskScorer
     config: DatasetRiskConfig = field(default_factory=DatasetRiskConfig)
 
@@ -301,13 +231,11 @@ class DatasetRiskProcessor(IDatasetProcessor):
 
         columns = list(dataset.features.keys())
 
-        print("\nSelect code columns (↑ ↓ move, space toggle, enter confirm):")
+        print("\nSelect code columns:")
         selected_columns = select_code_columns(columns)
 
         if not selected_columns:
             raise ValueError("No columns selected. Cannot score dataset.")
-
-        print("Selected code columns:", selected_columns)
 
         annotator = DatasetAnnotator(
             self.scorer,
@@ -355,12 +283,10 @@ class DatasetRiskProcessor(IDatasetProcessor):
 
 @dataclass
 class DatasetRiskDecorator(IDatasetRiskDecorator):
-    detector: ICodeColumnDetector
     scorer: IRiskScorer
     threshold: float = 0.5
-    fail_on_no_code_columns: bool = False
     filter_mode: Literal["none", "keep_safe", "keep_problematic"] = "keep_safe"
-    max_rows: Optional[int] = None 
+    max_rows: Optional[int] = None
 
     def __post_init__(self) -> None:
         if not (0.0 <= self.threshold <= 1.0):
@@ -368,11 +294,9 @@ class DatasetRiskDecorator(IDatasetRiskDecorator):
 
     def __call__(self, loader_fn: Callable[..., HF_Dataset]):
         processor = DatasetRiskProcessor(
-            detector=self.detector,
             scorer=self.scorer,
             config=DatasetRiskConfig(
                 threshold=self.threshold,
-                fail_on_no_code_columns=self.fail_on_no_code_columns,
                 filter_mode=self.filter_mode,
                 max_rows=self.max_rows,
             ),

@@ -1,48 +1,46 @@
 """
-Demo: Filter risky code and surface it for prioritization
+Demo: Annotate code with risk scores and prioritize review
 """
 
 from datasets import load_dataset
 from dataset_risk_decorator.core import (
     DatasetRiskDecorator,
-    HeuristicCodeColumnDetector,
     DebertaRiskScorer,
 )
 
-# 1. Components
-detector = HeuristicCodeColumnDetector()
+# 1. Scorer (loaded once)
 scorer = DebertaRiskScorer("durinn/data-eval")
 
 # 2. Risk decorator
 risk_guard = DatasetRiskDecorator(
-    detector=detector,
     scorer=scorer,
-    threshold=0.5,              # policy knob
-    filter_mode="none",          # annotate only
-    max_rows=2000
+    threshold=0.5,        # kept for metadata, not filtering
+    filter_mode="none",   # always annotate
+    max_rows=2000,        # speed knob
 )
 
-# 3. Dataset loader
+# 3. Dataset loader (decorated)
 @risk_guard
 def load_data():
     return load_dataset("CyberNative/Code_Vulnerability_Security_DPO")
 
-# 4. Run
+# 4. Run annotation
 ds = load_data()
 train = ds["train"]
 
-# 5. Split by risk
-problematic = train.filter(lambda r: r["is_problematic"])
-safe = train.filter(lambda r: not r["is_problematic"])
+print("Total rows annotated:", len(train))
 
-print("Total:", len(train))
-print("Problematic:", len(problematic))
-print("Safe:", len(safe))
+# 5. Inspect score distribution (THIS is the signal)
+scores = train["risk_score"]
+print("Min score:", min(scores))
+print("Mean score:", sum(scores) / len(scores))
+print("Max score:", max(scores))
 
-# 6. Prioritize new data collection
-top_risky = problematic.sort("risk_score", reverse=True).select(range(10))
+# 6. Prioritize highest-risk samples (always works)
+top_risky = train.sort("risk_score", reverse=True).select(range(10))
 
+print("\nTop risky samples:")
 for row in top_risky:
     print("---")
     print("risk_score:", row["risk_score"])
-    print(row.get("output", "")[:200])
+    print(row["chosen"][:200])
