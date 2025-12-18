@@ -79,6 +79,8 @@ class DatasetRiskConfig:
     threshold: float = 0.5
     fail_on_no_code_columns: bool = False
     filter_mode: Literal["none", "keep_safe", "keep_problematic"] = "none"
+    max_rows: Optional[int] = None   # NEW
+
 
 # ---------------------------------------------------------------------------
 # Heuristic Code Column Detection
@@ -235,6 +237,44 @@ class DatasetAnnotator(IDatasetAnnotator):
 # Dataset Processor (ANNOTATE + FILTER)
 # ---------------------------------------------------------------------------
 
+from prompt_toolkit import prompt
+from prompt_toolkit.key_binding import KeyBindings
+
+def select_code_columns(columns: List[str]) -> List[str]:
+    selected = {c: False for c in columns}
+    index = 0
+    kb = KeyBindings()
+
+    @kb.add("up")
+    def _(_):
+        nonlocal index
+        index = (index - 1) % len(columns)
+
+    @kb.add("down")
+    def _(_):
+        nonlocal index
+        index = (index + 1) % len(columns)
+
+    @kb.add(" ")
+    def _(_):
+        col = columns[index]
+        selected[col] = not selected[col]
+
+    @kb.add("enter")
+    def _(event):
+        event.app.exit()
+
+    def render():
+        lines = []
+        for i, c in enumerate(columns):
+            mark = "[x]" if selected[c] else "[ ]"
+            cursor = "➤" if i == index else " "
+            lines.append(f"{cursor} {mark} {c}")
+        return "\n".join(lines)
+
+    prompt(render, key_bindings=kb)
+    return [c for c, v in selected.items() if v]
+
 @dataclass
 class DatasetRiskProcessor(IDatasetProcessor):
     detector: ICodeColumnDetector
@@ -251,19 +291,24 @@ class DatasetRiskProcessor(IDatasetProcessor):
         return CodeDetectionResult(detected_columns=cols)
 
     def _annotate_single_dataset(self, dataset: Dataset) -> Dataset:
-        detection = self._detect_code_columns(dataset)
-        print("Detected code columns:", detection.detected_columns)
+        if self.config.max_rows is not None:
+            dataset = dataset.shuffle(seed=42).select(range(self.config.max_rows))
 
-        if not detection.detected_columns:
-            if self.config.fail_on_no_code_columns:
-                raise ValueError("No code columns detected in dataset.")
-            annotator = DatasetAnnotator(self.scorer, [], self.config.threshold)
-        else:
-            annotator = DatasetAnnotator(
-                self.scorer,
-                detection.detected_columns,
-                self.config.threshold,
-            )
+        columns = list(dataset.features.keys())
+
+        print("\nSelect code columns (↑ ↓ move, space toggle, enter confirm):")
+        selected_columns = select_code_columns(columns)
+
+        if not selected_columns:
+            raise ValueError("No columns selected. Cannot score dataset.")
+
+        print("Selected code columns:", selected_columns)
+
+        annotator = DatasetAnnotator(
+            self.scorer,
+            selected_columns,
+            self.config.threshold,
+        )
 
         return dataset.map(
             annotator.annotate_batch,
@@ -271,6 +316,7 @@ class DatasetRiskProcessor(IDatasetProcessor):
             batch_size=128,
             desc="Annotating dataset with risk scores",
         )
+
 
     def get_problematic(self, dataset: Dataset) -> Dataset:
         return dataset.filter(lambda r: r["is_problematic"] is True)
@@ -309,6 +355,7 @@ class DatasetRiskDecorator(IDatasetRiskDecorator):
     threshold: float = 0.5
     fail_on_no_code_columns: bool = False
     filter_mode: Literal["none", "keep_safe", "keep_problematic"] = "keep_safe"
+    max_rows: Optional[int] = None 
 
     def __post_init__(self) -> None:
         if not (0.0 <= self.threshold <= 1.0):
@@ -322,6 +369,7 @@ class DatasetRiskDecorator(IDatasetRiskDecorator):
                 threshold=self.threshold,
                 fail_on_no_code_columns=self.fail_on_no_code_columns,
                 filter_mode=self.filter_mode,
+                max_rows=self.max_rows,
             ),
         )
 

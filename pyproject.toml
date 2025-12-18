@@ -51,6 +51,7 @@ mypy = ">=1.8.0"
 ipython = ">=8.20.0"
 build = ">=1.2.1"
 twine = ">=6.0.1"
+prompt-toolkit = ">=3.0.43"
 
 [build-system]
 requires = ["poetry-core>=1.8.0"]

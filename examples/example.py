@@ -19,6 +19,7 @@ risk_guard = DatasetRiskDecorator(
     scorer=scorer,
     threshold=0.5,              # policy knob
     filter_mode="none",          # annotate only
+    max_rows=2000
 )
 
 # 3. Dataset loader
