@@ -75,7 +75,8 @@ class DatasetRiskConfig:
     threshold: float = 0.5
     fail_on_no_code_columns: bool = False
     filter_mode: Literal["none", "keep_safe", "keep_problematic"] = "none"
-    max_rows: Optional[int] = None   # NEW
+    max_rows: Optional[int] = None  
+    cache: Literal["auto", "reuse", "disable"] = "auto"
 
 
 # ---------------------------------------------------------------------------
@@ -96,13 +97,26 @@ from transformers import AutoModelForSequenceClassification, AutoModelForSequenc
 class DebertaRiskScorer(IRiskScorer):
     model_path: str = "durinn/data-eval"
     device: Optional[str] = None
+    reuse_model: bool = True
 
     def __post_init__(self):
         self.device = self.device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
-        self.model = AutoModelForSequenceClassification.from_pretrained(self.model_path)
-        self.model.to(self.device)
-        self.model.eval()
+        key = (self.model_path, self.device)
+
+        if self.reuse_model and key in _MODEL_CACHE:
+            self.tokenizer, self.model = _MODEL_CACHE[key]
+            return
+
+        tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+        model = AutoModelForSequenceClassification.from_pretrained(self.model_path)
+        model.to(self.device)
+        model.eval()
+
+        if self.reuse_model:
+            _MODEL_CACHE[key] = (tokenizer, model)
+
+        self.tokenizer = tokenizer
+        self.model = model
 
     @torch.no_grad()
     def score_batch(self, codes: List[str]) -> List[float]:
@@ -170,6 +184,7 @@ class DatasetAnnotator(IDatasetAnnotator):
 
 import sys
 import os
+
 def select_code_columns(columns: List[str]) -> List[str]:
     # HARD disable interactive TUI in notebooks / colab
     if "ipykernel" in sys.modules or os.environ.get("COLAB_GPU"):
@@ -248,6 +263,10 @@ class DatasetRiskProcessor(IDatasetProcessor):
             batched=True,
             batch_size=128,
             desc="Annotating dataset with risk scores",
+            load_from_cache_file = (
+                self.config.cache != "disable"
+                and not sys.stdin.isatty()
+            )
         )
 
 
@@ -281,16 +300,14 @@ class DatasetRiskProcessor(IDatasetProcessor):
 # Decorator API
 # ---------------------------------------------------------------------------
 
+_MODEL_CACHE: dict = {}
+
 @dataclass
 class DatasetRiskDecorator(IDatasetRiskDecorator):
     scorer: IRiskScorer
     threshold: float = 0.5
     filter_mode: Literal["none", "keep_safe", "keep_problematic"] = "keep_safe"
     max_rows: Optional[int] = None
-
-    def __post_init__(self) -> None:
-        if not (0.0 <= self.threshold <= 1.0):
-            raise ValueError("threshold must be in [0.0, 1.0]")
 
     def __call__(self, loader_fn: Callable[..., HF_Dataset]):
         processor = DatasetRiskProcessor(
@@ -329,6 +346,7 @@ def risk_guard(
     threshold: float = 0.5,
     filter_mode: Literal["none", "keep_safe", "keep_problematic"] = "none",
     max_rows: Optional[int] = None,
+    cache="auto"
 ) -> Dataset | DatasetDict:
     """
     Annotate a Hugging Face Dataset or DatasetDict with risk scores.
@@ -340,6 +358,7 @@ def risk_guard(
             threshold=threshold,
             filter_mode=filter_mode,
             max_rows=max_rows,
+            cache=cache,
         ),
     )
 

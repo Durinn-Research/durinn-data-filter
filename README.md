@@ -1,3 +1,7 @@
+Here is a **clean, minimal update** to the README that reflects the caching and fixes, without exposing HF internals or adding noise. You can paste this over the existing one.
+
+---
+
 # Dataset Risk Decorator
 
 A lightweight, plug-and-play **risk annotation and filtering utility for Hugging Face datasets**.
@@ -16,9 +20,6 @@ Designed for:
 * Preference / DPO preprocessing
 * Security research workflows
 
-
----
-
 ## Maintainer
 
 **Durinn Research**
@@ -27,8 +28,6 @@ Designed for:
 [https://huggingface.co/durinn](https://huggingface.co/durinn)
 [https://durinn.ai](https://durinn.ai)
 
----
-
 ## Features
 
 * Works with `datasets.Dataset` and `datasets.DatasetDict`
@@ -36,9 +35,8 @@ Designed for:
 * Adds risk metadata without breaking downstream pipelines
 * Optional row limiting for fast iteration
 * Optional automatic filtering modes
+* Built-in dataset and model caching
 * Trainer-compatible output
-
----
 
 ## Installation
 
@@ -53,8 +51,6 @@ python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 ```
-
----
 
 ## Quick Start
 
@@ -85,8 +81,6 @@ risk_score
 is_problematic
 ```
 
----
-
 ## Configuration
 
 All configuration is optional and passed directly to `risk_guard`.
@@ -97,6 +91,7 @@ ds = risk_guard(
     threshold=0.5,
     filter_mode="none",
     max_rows=2000,
+    cache="auto",
 )
 ```
 
@@ -107,8 +102,23 @@ ds = risk_guard(
 | `threshold`   | Threshold used to set `is_problematic`           |
 | `filter_mode` | `"none"`, `"keep_safe"`, or `"keep_problematic"` |
 | `max_rows`    | Limit number of rows for faster iteration        |
+| `cache`       | `"auto"`, `"reuse"`, or `"disable"`              |
 
----
+### Cache behavior
+
+* **Datasets** use Hugging Face’s built-in fingerprinted caching
+  Annotation results are reused automatically across reruns when inputs and configuration are unchanged.
+* **Models** are downloaded once and reused across calls within the same process.
+* No environment variables or cache directories need to be configured by the user.
+
+Cache modes:
+
+* `auto`
+  Default behavior. Uses Hugging Face cache when safe.
+* `reuse`
+  Forces reuse of cached annotation results.
+* `disable`
+  Forces recomputation.
 
 ## Filtering Modes
 
@@ -118,9 +128,7 @@ ds = risk_guard(
 | `"keep_safe"`        | Keep only low-risk rows  |
 | `"keep_problematic"` | Keep only high-risk rows |
 
-Filtering happens **after** annotation.
-
----
+Filtering happens after annotation.
 
 ## Common Usage Patterns
 
@@ -134,8 +142,6 @@ print("mean:", sum(scores) / len(scores))
 print("max:", max(scores))
 ```
 
----
-
 ### Train on Safe Samples Only
 
 ```python
@@ -146,8 +152,6 @@ safe_ds = risk_guard(
 
 print(len(safe_ds))
 ```
-
----
 
 ### Extract High-Risk Samples for Analysis
 
@@ -160,8 +164,6 @@ risky_ds = risk_guard(
 for row in risky_ds.select(range(10)):
     print(row["risk_score"], row.get("func", "")[:200])
 ```
-
----
 
 ## DatasetDict Support
 
@@ -176,8 +178,6 @@ test = ds["test"]
 
 Each split is annotated independently.
 
----
-
 ## Project Structure
 
 ```text
@@ -191,8 +191,6 @@ dataset-risk-decorator/
 ├── pyproject.toml
 └── README.md
 ```
-
----
 
 ## Disclaimer
 
