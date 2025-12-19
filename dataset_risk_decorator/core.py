@@ -250,7 +250,14 @@ class DatasetRiskProcessor(IDatasetProcessor):
         selected_columns = select_code_columns(columns)
 
         if not selected_columns:
-            raise ValueError("No columns selected. Cannot score dataset.")
+            print("No columns selected. Exiting.")
+            sys.exit(0)
+
+        missing = [c for c in selected_columns if c not in columns]
+        if missing:
+            print(f"Error: column(s) not found in dataset: {missing}")
+            print(f"Available columns: {columns}")
+            sys.exit(1)
 
         annotator = DatasetAnnotator(
             self.scorer,
@@ -263,12 +270,11 @@ class DatasetRiskProcessor(IDatasetProcessor):
             batched=True,
             batch_size=128,
             desc="Annotating dataset with risk scores",
-            load_from_cache_file = (
+            load_from_cache_file=(
                 self.config.cache != "disable"
                 and not sys.stdin.isatty()
-            )
+            ),
         )
-
 
     def get_problematic(self, dataset: Dataset) -> Dataset:
         return dataset.filter(lambda r: r["is_problematic"] is True)
